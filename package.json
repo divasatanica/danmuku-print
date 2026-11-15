@@ -1,0 +1,25 @@
+{
+  "name": "danmaku-print",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.13.0"
+  },
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "test": "npm run test --workspace backend",
+    "typecheck": "npm run typecheck --workspaces",
+    "build": "npm run build --workspaces",
+    "start": "npm run start --workspace backend",
+    "dev": "concurrently --kill-others --names api,web \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm run dev --workspace backend",
+    "dev:web": "npm run dev --workspace frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.7"
+  }
+}

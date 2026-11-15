@@ -1,0 +1,21 @@
+{
+  "name": "@danmaku-print/source",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --watch-kill-signal SIGTERM src/index.ts --dev",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node ../dist/backend/index.js",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "~5.9.3"
+  }
+}
