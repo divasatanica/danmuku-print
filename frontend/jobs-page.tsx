@@ -124,6 +124,9 @@ function JobsTable({ before, previous, next }: {
                         <div><dt>观众</dt><dd>#{job.viewerNumber} {job.nickname}</dd></div>
                         <div><dt>直播间</dt><dd>{job.roomId}</dd></div>
                         <div><dt>弹幕编号</dt><dd>{job.eventId}</dd></div>
+                        <div><dt>入队时间</dt><dd>{job.createdAt
+                          ? <time dateTime={job.createdAt}>{dateTime.format(new Date(job.createdAt))}</time>
+                          : '—'}</dd></div>
                         {job.retryOf !== null && <div><dt>原任务</dt><dd>#{job.retryOf}</dd></div>}
                       </dl>
                     </details>

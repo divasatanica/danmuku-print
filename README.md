@@ -20,6 +20,24 @@ npm start         # 在同一端口提供页面和 API
 
 构建产物分别写入 `dist/frontend/` 和 `dist/backend/`。生产模式打开 [打印控制台](http://127.0.0.1:8758)。
 
+### 启动并打开页面
+
+`npm run dev` 和 `npm start` 都只起服务，不打开浏览器。仓库根目录的两个脚本会启动服务、等待 Web 端口就绪，再用对应平台的方式打开页面：
+
+```sh
+./scripts/dev-open.sh          # macOS / Linux，开发模式
+./scripts/dev-open.sh --prod   # 先构建，再以生产模式启动
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\dev-open.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\dev-open.ps1 -Prod
+```
+
+开发模式打开 `PRINT_WEB_PORT`（默认 5173），生产模式打开 `PRINT_PORT`（默认 8758）。脚本用 Vite 的 `/@vite/client` 判断开发服务器就绪，因此占用同一端口的其他服务不会被误认成这个项目；依赖没装（缺 `node_modules`）时会直接提示先运行 `npm ci`。Ctrl+C 停止服务，脚本退出时一并结束它启动的进程。
+
+Windows 上如果提示执行策略限制（脚本没有数字签名），用上面的 `-ExecutionPolicy Bypass` 调用即可，或先执行一次 `Set-ExecutionPolicy -Scope Process Bypass`，再运行 `.\scripts\dev-open.ps1`。
+
 `npm ci` 会按当前平台安装 `@napi-rs/canvas` 的原生二进制（macOS arm64 和 Windows x64 都有预编译包），标签字体随仓库分发，不依赖系统安装的中文字体。构建时 `backend/scripts/copy-assets.mjs` 会把字体复制到 `dist/backend/assets/fonts/`。
 
 | 环境变量 | 开发默认值 | 生产默认值 |
@@ -43,7 +61,9 @@ npm start         # 在同一端口提供页面和 API
 
 默认的模拟适配器（`PRINT_BACKEND=mock`）把每次打印写成一行 JSON 到终端，不驱动任何打印机。显式设置 `PRINT_BACKEND=system` 并提供 `PRINT_QUEUE` 后才会真实出纸，配置见下文「[动态标签打印](#动态标签打印)」。
 
-控制台的「打印任务」页（`/jobs`）按编号从新到旧展示任务，展开弹幕可查看原文、观众、直播间和来源任务。排队中的任务可以取消，已经开始打印的任务会继续执行。已完成、失败、已取消或待确认的任务可以重新运行。每条任务最多生成一条关联的重跑记录，如需再次重跑，可对最新记录操作。手动重跑不消耗监听额度，取消也不会返还已扣除的额度。
+控制台右侧的「打印任务」列表与左侧的监听控制台在同一页面（窄屏时自动改为上下排列），按编号从新到旧展示任务，展开弹幕可查看原文、观众、直播间和来源任务。排队中的任务可以取消，已经开始打印的任务会继续执行。已完成、失败、已取消或待确认的任务可以重新运行。每条任务最多生成一条关联的重跑记录，如需再次重跑，可对最新记录操作。手动重跑不消耗监听额度，取消也不会返还已扣除的额度。
+
+页面与打印服务之间是短轮询：`/api/status` 每 1 秒、`/api/jobs` 每 2 秒请求一次。页面只是查看和操作入口，关闭页面不影响服务端监听与打印；服务端与 DyHub 之间才使用 WebSocket 长连接，前端没有使用 SSE 或 WebSocket。
 
 ## 动态标签打印
 
