@@ -119,6 +119,7 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
   const jobAction = /^\/api\/jobs\/([^/]+)\/(retry|cancel)$/.exec(path);
   if (request.method === 'POST' && (jobAction || ['/api/start', '/api/stop', '/api/limit', '/api/keywords'].includes(path))) {
     if (request.headers.origin !== undefined && request.headers.origin !== origin && request.headers.origin !== devOrigin) {
+      console.log('request.headers.origin', request.headers.origin, origin, devOrigin);
       return json(response, 403, { error: '请从打印控制台提交操作。' });
     }
     if (request.headers['content-type']?.split(';')[0].trim() !== 'application/json') {
@@ -141,7 +142,7 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     }
 
     switch (path) {
-      case '/api/start': listener.start(input.roomId, input.keywords); break;
+      case '/api/start': listener.start(input.keywords); break;
       case '/api/keywords': listener.setKeywords(input.keywords); break;
       case '/api/stop': listener.stop(); break;
       case '/api/limit': listener.setLimit(input.limit); break;

@@ -16,10 +16,14 @@
     "build": "npm run build --workspaces",
     "start": "npm run start --workspace backend",
     "dev": "concurrently --kill-others --names api,web \"npm run dev:api\" \"npm run dev:web\"",
+    "dev-print": "cross-env PRINT_BACKEND=system PRINT_QUEUE=\"HPRT N31D\" npm run dev",
     "dev:api": "npm run dev --workspace backend",
     "dev:web": "npm run dev --workspace frontend"
   },
   "devDependencies": {
     "concurrently": "^10.0.7"
+  },
+  "dependencies": {
+    "cross-env": "^10.1.0"
   }
 }

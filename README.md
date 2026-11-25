@@ -1,6 +1,6 @@
 # 独立的 DyHub 弹幕打印服务
 
-打印服务通过 DyHub 的 `/ws?roomId=…&types=chat` 接收弹幕。控制台关闭后，监听和打印由服务进程继续执行。
+打印服务通过 DyHub 的 `/ws?types=chat` 接收弹幕。订阅时不指定直播间，DyHub 当前采集的所有直播间的弹幕都会进入打印匹配，因此不需要填写直播间号。控制台关闭后，监听和打印由服务进程继续执行。
 
 ## 安装与启动
 
@@ -51,8 +51,8 @@ Windows 上如果提示执行策略限制（脚本没有数字签名），用上
 
 ## 使用
 
-1. 输入数字直播间号，点击「开始监听」。每场默认不限量。关键词留空时，服务去掉弹幕中所有空白字符（包括全角空格和制表符），只匹配整条都是十进制整数或小数的弹幕。例如 `1 2 . 5` 和 `-12` 会匹配，`12 元` 和 `1e3` 不会。填写关键词后，改为匹配任一关键词子串，忽略空白和英文字母大小写；关键词用逗号或换行分隔。打印保留弹幕原文。
-   监听过程中可以直接修改关键词，点击「更新关键词」立即生效，不需要断开重连。新关键词只作用于之后的弹幕；已经排队或打印的任务、剩余额度都不会变化。直播间号仍然只能在停止后更改。
+1. 点击「开始监听」，打印服务连接 DyHub 的弹幕推送，所有直播间共用一路订阅，不需要填写直播间号。采集由 DyHub 负责：开始监听前先在 DyHub 控制台连接要监控的直播间，打印服务本身不触发采集。每场默认不限量。关键词留空时，服务去掉弹幕中所有空白字符（包括全角空格和制表符），只匹配整条都是十进制整数或小数的弹幕。例如 `1 2 . 5` 和 `-12` 会匹配，`12 元` 和 `1e3` 不会。填写关键词后，改为匹配任一关键词子串，忽略空白和英文字母大小写；关键词用逗号或换行分隔。打印保留弹幕原文。
+   监听过程中可以直接修改关键词，点击「更新关键词」立即生效，不需要断开重连。新关键词只作用于之后的弹幕；已经排队或打印的任务、剩余额度都不会变化。
 2. 监听期间可设置正整数上限，或点击「清除限制」。每次设限从之后收到的弹幕重新计数。失败的打印占用额度，排队数为等待处理的任务数。
 3. 点击「停止监听」后，打印服务断开订阅并继续处理已经排队的任务，处理完即可开始下一场。DyHub 管理台可以管理房间采集。
 4. SQLite 按字符串 UID 保存全局观众编号，并在同一数据库的 `print_jobs` 表保存每条打印任务。服务先保存任务，再扣减额度，最后按任务 ID 顺序逐条打印。新任务的 `created_at` 记录 UTC 入库时间，升级前的任务在该字段保留 `NULL`。
@@ -127,7 +127,7 @@ macOS 的 transport 用 `lp -d <queue> -o raw -n 1 -t <title> -- <file>` 提交�
 
 ```bat
 set PRINT_BACKEND=system
-set PRINT_QUEUE=<队列名>
+set PRINT_QUEUE=HPRT N31D
 set PRINT_LABEL_WIDTH_MM=40
 set PRINT_LABEL_HEIGHT_MM=30
 npm ci
@@ -135,11 +135,11 @@ npm run build
 npm start
 ```
 
-队列名确定后填入 `<队列名>`；之后换队列只改 `PRINT_QUEUE`，不需要改代码或重新构建。Windows 通过 PowerShell 调用 `winspool.drv` 的 `OpenPrinterW`/`StartDocPrinterW`/`WritePrinter`（datatype 为 `RAW`），TSPL 字节通过 stdin 传入，不经过命令行，也不落临时文件。服务是命令行进程，不提供 Windows Service 或安装包。
+Windows 装好驱动后 spooler 里的队列名是 `HPRT N31D`（中间是空格），与 macOS 上的 CUPS 队列 `HPRT_N31D`（下划线）不同，不要混用；名字写错时日志里的错误是 `OpenPrinterW failed (Win32 1801)`。队列名可对照「设置 → 蓝牙和其他设备 → 打印机和扫描仪」，或直接看报错信息里列出的本机队列，之后换队列只改 `PRINT_QUEUE`，不需要改代码或重新构建。Windows 通过 PowerShell 调用 `winspool.drv` 的 `OpenPrinterW`/`StartDocPrinterW`/`WritePrinter`（datatype 为 `RAW`），TSPL 字节通过 stdin 传入，不经过命令行，也不落临时文件。服务是命令行进程，不提供 Windows Service 或安装包。
 
 ### 打印空白或偏移怎么排查
 
-1. 完全空白：确认 `PRINT_BACKEND=system`、`PRINT_QUEUE` 与 spooler 里的队列名完全一致；再试 `PRINT_HPRT_HEADER_BYTES=0`（部分 Windows 驱动不需要这 512 字节头）；确认热敏纸正面朝向打印头。
+1. 完全空白：确认 `PRINT_BACKEND=system`、`PRINT_QUEUE` 与 spooler 里的队列名完全一致；日志里出现 `OpenPrinterW failed (Win32 1801)` 就说明队列名不存在（Windows 上是 `HPRT N31D`，带空格），按报错里列出的本机队列改正即可；再试 `PRINT_HPRT_HEADER_BYTES=0`（部分 Windows 驱动不需要这 512 字节头）；确认热敏纸正面朝向打印头。
 2. 有内容但横向偏移或被裁边：先做一次标签学习，并让纸张靠紧导轨；仍偏移时把 `PRINT_LABEL_INSET_MM` 从 `2` 调到 `3`，同时保持边框关闭。
 3. 中文显示成方块、英文正常：字体资源缺失。重新执行 `npm run build`，确认 `dist/backend/assets/fonts/NotoSansSC-Regular.ttf` 存在。
 4. 任务不进队列：macOS 用 `lpstat -p <queue>` 和 `lpstat -W not-completed -o <queue>` 查看；Windows 在「打印机和扫描仪」里确认队列没有暂停、缺纸或脱机。
@@ -172,7 +172,7 @@ npm run preview:label --workspace backend -- --time 2026-11-24T15:24:11+08:00 --
 
 | 路径 | 请求体 |
 | --- | --- |
-| `/api/start` | `{"roomId":"123"}` 默认匹配纯数字；可传 `"keywords":"关键词,hello"` 启用关键词匹配 |
+| `/api/start` | `{}` 默认匹配纯数字；可传 `"keywords":"关键词,hello"` 启用关键词匹配。不需要直播间号 |
 | `/api/keywords` | `{"keywords":"新关键词"}`。监听中更换关键词，立即对之后的弹幕生效；传空串回到纯数字匹配 |
 | `/api/limit` | `{"limit":10}`。传 `null` 清除限制 |
 | `/api/stop` | `{}` |

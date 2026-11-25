@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { Listener } from '../backend/src/listener.ts';
 
 type Status = ReturnType<Listener['status']> & { dyhubUrl: string };
-type Draft = { roomId: string; keywords: string; limit: string };
+type Draft = { keywords: string; limit: string };
 type ConsoleState = { status: Status | null; draft: Draft };
 type Command =
-  | ['/api/start', { roomId: string; keywords: string }]
+  | ['/api/start', { keywords: string }]
   | ['/api/keywords', { keywords: string }]
   | ['/api/stop', Record<string, never>]
   | ['/api/limit', { limit: number | null }];
@@ -19,15 +19,14 @@ async function requestStatus(path: string, options?: RequestInit): Promise<Statu
 
 function applyStatus(previous: ConsoleState, status: Status): ConsoleState {
   const old = previous.status;
-  const { roomId, keywords, phase } = status;
-  const taskChanged = old?.roomId !== roomId || old?.keywords !== keywords;
+  const { keywords, phase } = status;
+  const taskChanged = old?.keywords !== keywords;
   const switchedListening = old !== null && (old.phase === 'listening') !== (phase === 'listening');
   // Keep in-progress edits while listening, but resync when a task starts, stops, or changes.
-  const syncTask = roomId !== null && (!old || taskChanged || switchedListening);
+  const syncTask = !old || taskChanged || switchedListening;
   return {
     status,
     draft: {
-      roomId: syncTask ? roomId : previous.draft.roomId,
       keywords: syncTask ? keywords : previous.draft.keywords,
       limit: old?.limit !== status.limit ? String(status.limit ?? '') : previous.draft.limit,
     },
@@ -37,7 +36,7 @@ function applyStatus(previous: ConsoleState, status: Status): ConsoleState {
 export function useConsole() {
   const [{ status, draft }, setConsole] = useState<ConsoleState>({
     status: null,
-    draft: { roomId: '', keywords: '', limit: '' },
+    draft: { keywords: '', limit: '' },
   });
   const [busy, setBusy] = useState(false);
   const [apiError, setApiError] = useState('');

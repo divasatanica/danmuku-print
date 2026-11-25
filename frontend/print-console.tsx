@@ -38,21 +38,15 @@ export function PrintConsole({ status, draft, busy, apiError, pollFailed, edit, 
       <div className="controls">
         <form className="card" aria-labelledby="listener-heading" onSubmit={event => {
           event.preventDefault();
-          void mutate('/api/start', { roomId: draft.roomId, keywords: draft.keywords });
+          void mutate('/api/start', { keywords: draft.keywords });
         }}>
-          <h2 id="listener-heading">直播间监听</h2>
-          <div className="field">
-            <label htmlFor="room">直播间号（必填）</label>
-            <input id="room" name="roomId" inputMode="numeric" pattern="[0-9]{1,32}" maxLength={32}
-              required readOnly={taskLocked} value={draft.roomId}
-              onChange={event => edit('roomId', event.target.value)} />
-          </div>
+          <h2 id="listener-heading">弹幕监听</h2>
           <div className="field">
             <label htmlFor="keywords">关键词（选填）</label>
             <textarea id="keywords" name="keywords" rows={3} maxLength={2000}
               aria-describedby="keyword-help" readOnly={keywordsLocked} value={draft.keywords}
               onChange={event => edit('keywords', event.target.value)} />
-            <p id="keyword-help" className="hint">留空时，只匹配去掉所有空格后的整数或小数。填写时，用逗号或换行分隔；匹配时忽略空格和英文字母大小写。监听中可直接修改，点「更新关键词」对之后的弹幕生效；已入队的任务和剩余额度不受影响。</p>
+            <p id="keyword-help" className="hint">监听 DyHub 采集的全部直播间。留空时，只匹配去掉所有空格后的整数或小数。填写时，用逗号或换行分隔；匹配时忽略空格和英文字母大小写。监听中可直接修改，点「更新关键词」对之后的弹幕生效；已入队的任务和剩余额度不受影响。</p>
           </div>
           <div className="actions">
             <button type="submit" disabled={taskLocked}>开始监听</button>

@@ -31,7 +31,6 @@ export function record(value: unknown): Record<string, unknown> {
 export class Listener {
   private phase: 'idle' | 'listening' | 'draining' = 'idle';
   private connection: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' = 'disconnected';
-  private roomId: string | null = null;
   private keywordInput = '';
   private keywords: string[] = [];
   private limit: number | null = null;
@@ -61,25 +60,22 @@ export class Listener {
 
   status() {
     const {
-      phase, connection, roomId, keywordInput, limit, remaining,
+      phase, connection, keywordInput, limit, remaining,
       succeeded, failed, connectionError,
     } = this;
     const printing = this.activeJobId !== undefined;
     const queued = this.jobs.count('pending');
     const unconfirmed = this.jobs.count('printing') - Number(printing);
     return {
-      phase, connection, roomId, keywords: keywordInput, limit, remaining,
+      phase, connection, keywords: keywordInput, limit, remaining,
       queued, printing, succeeded, failed, unconfirmed, connectionError,
     };
   }
 
-  start(roomInput: unknown, keywordInput?: unknown): void {
+  start(keywordInput?: unknown): void {
     if (this.phase !== 'idle') throw new StateError('当前任务仍在监听或处理打印队列。');
-    const roomId = typeof roomInput === 'string' ? roomInput.trim() : '';
-    if (!/^\d{1,32}$/.test(roomId)) throw new InputError('请输入 1 到 32 位数字的直播间号。');
     const { input, terms } = parseKeywords(keywordInput);
 
-    this.roomId = roomId;
     this.keywordInput = input;
     this.keywords = terms;
     this.limit = this.remaining = null;
@@ -87,7 +83,7 @@ export class Listener {
     this.connectionError = null;
     this.phase = 'listening';
     this.connection = 'connecting';
-    this.connect(roomId);
+    this.connect();
   }
 
   setKeywords(keywordInput: unknown): void {
@@ -119,9 +115,9 @@ export class Listener {
     await this.queue;
   }
 
-  private connect(roomId: string): void {
+  private connect(): void {
     const url = new URL(this.endpoint);
-    url.searchParams.set('roomId', roomId);
+    console.log('url', url);
     url.searchParams.set('types', 'chat');
     const socket = new WebSocket(url, { handshakeTimeout: 10000, maxPayload: 1024 * 1024 });
     this.socket = socket;
@@ -137,7 +133,7 @@ export class Listener {
     }, 25000);
     socket.on('pong', () => { awaitingPong = false; });
     socket.on('message', (payload, binary) => {
-      if (this.socket === socket && !binary) this.receive(payload.toString(), roomId);
+      if (this.socket === socket && !binary) this.receive(payload.toString());
     });
     socket.on('error', () => {
       if (this.socket === socket) this.connectionError = '无法连接 DyHub WebSocket。';
@@ -148,23 +144,22 @@ export class Listener {
       this.socket = undefined;
       this.connection = 'reconnecting';
       const wait = Math.min(30000, this.reconnectDelay * 2 ** Math.min(this.reconnectAttempts++, 4));
-      this.reconnectTimer = setTimeout(() => this.connect(roomId), wait);
+      this.reconnectTimer = setTimeout(() => this.connect(), wait);
     });
   }
 
-  private receive(payload: string, roomId: string): void {
+  private receive(payload: string): void {
     let event: Record<string, unknown>;
     try {
       event = record(JSON.parse(payload));
     } catch {
       return;
     }
-    if (event.roomId !== roomId) return;
     if (event.type === '__error') {
       this.connectionError = typeof event.error === 'string' ? event.error.slice(0, 500) : 'DyHub 房间连接失败。';
       return;
     }
-    if (event.type === '__connected' || event.type === 'chat') {
+    if (event.type === '__hello' || event.type === '__connected' || event.type === 'chat') {
       this.connection = 'connected';
       this.connectionError = null;
       this.reconnectAttempts = 0;
@@ -192,6 +187,7 @@ export class Listener {
       : decimalNumber.test(text);
     if (!matches) return;
 
+    const roomId = typeof event.roomId === 'string' ? event.roomId : '';
     try {
       this.jobs.enqueue({ viewerNumber, nickname: user.nickname, content, roomId, eventId: id, timestamp: ts });
     } catch (error) {

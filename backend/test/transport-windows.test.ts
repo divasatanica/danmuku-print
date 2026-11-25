@@ -65,6 +65,31 @@ test('POWERSHELL_SCRIPT 使用 winspool RAW 而不是写临时文件', () => {
   assert.doesNotMatch(POWERSHELL_SCRIPT, /Out-File|Set-Content|Get-Content/);
 });
 
+test('POWERSHELL_SCRIPT 用纯文本报错，并在队列名无效时列出本机队列', () => {
+  // -EncodedCommand 下未捕获的错误会被序列化成 CLIXML，Node 端只能读到乱码标签。
+  assert.doesNotMatch(POWERSHELL_SCRIPT, /Write-Error/);
+  assert.match(POWERSHELL_SCRIPT, /\[Console\]::Error\.WriteLine/);
+  assert.match(POWERSHELL_SCRIPT, /exit 1/);
+  assert.match(POWERSHELL_SCRIPT, /Win32 1801/);
+  assert.match(POWERSHELL_SCRIPT, /EnumPrintersW/);
+  assert.match(POWERSHELL_SCRIPT, /LocalQueueNames/);
+  assert.match(POWERSHELL_SCRIPT, /ProgressPreference/);
+});
+
+test('队列名不存在时错误里带上 PowerShell 给出的候选队列', async () => {
+  const hint = 'RAW 打印失败：OpenPrinterW failed (Win32 1801)；队列 HPRT_N31D 不在本机 spooler 里；'
+    + '本机队列：HPRT N31D / Fax（Windows 队列名区分空格，例如 "HPRT N31D"）';
+  const { spawnSync } = fakeSpawnSync({ status: 1, stdout: '', stderr: `${hint}\n` });
+  await assert.rejects(
+    submitRaw('HPRT_N31D', Buffer.from('x'), { deps: { spawnSync, env: {} } }),
+    (error: Error) => {
+      assert.match(error.message, /Win32 1801/);
+      assert.match(error.message, /本机队列：HPRT N31D/);
+      return true;
+    },
+  );
+});
+
 test('队列名和任务名只通过环境变量传递，队列名去首尾空白', async () => {
   const { calls, spawnSync } = fakeSpawnSync(success('7'));
   await submitRaw('  LabelQueue  ', Buffer.from('x'), {

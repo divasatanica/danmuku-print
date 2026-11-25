@@ -43,6 +43,8 @@ const MAX_QUEUE_LENGTH = 220;
  */
 export const POWERSHELL_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding -ArgumentList $false } catch { }
 Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
@@ -81,6 +83,49 @@ public static class RawLabelPrinter
 
     [DllImport("winspool.drv", ExactSpelling = true)]
     private static extern bool ClosePrinter(IntPtr printer);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct PrinterInfo
+    {
+        public string Name;
+        public string Server;
+        public uint Attributes;
+    }
+
+    [DllImport("winspool.drv", ExactSpelling = true, CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool EnumPrintersW(uint flags, string name, uint level, IntPtr buffer, uint size, out uint needed, out uint returned);
+
+    /// <summary>本机 spooler 里已安装的队列名，只用于错误提示。</summary>
+    public static string[] LocalQueueNames()
+    {
+        const uint local = 0x2;
+        const uint connections = 0x4;
+        uint needed;
+        uint returned;
+        EnumPrintersW(local | connections, null, 4, IntPtr.Zero, 0, out needed, out returned);
+        if (needed == 0) return new string[0];
+
+        IntPtr buffer = Marshal.AllocHGlobal((int)needed);
+        try
+        {
+            if (!EnumPrintersW(local | connections, null, 4, buffer, needed, out needed, out returned) || returned == 0)
+                return new string[0];
+
+            var names = new string[returned];
+            int stride = Marshal.SizeOf(typeof(PrinterInfo));
+            for (uint i = 0; i < returned; i++)
+            {
+                IntPtr item = new IntPtr(buffer.ToInt64() + i * stride);
+                var info = (PrinterInfo)Marshal.PtrToStructure(item, typeof(PrinterInfo));
+                names[i] = info.Name;
+            }
+            return names;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
 
     private static void Check(bool success, string operation)
     {
@@ -130,6 +175,24 @@ $inputBytes = New-Object System.IO.MemoryStream
 try {
     [Console]::OpenStandardInput().CopyTo($inputBytes)
     [RawLabelPrinter]::Submit($env:TSPL_PRINTER_NAME, $env:TSPL_DOCUMENT_NAME, $inputBytes.ToArray())
+} catch {
+    # 直接写 stderr 的纯文本：-EncodedCommand 下 PowerShell 会把错误记录序列化成
+    # CLIXML，Node 端读到的就是一串乱码标签。
+    $message = $_.Exception.Message
+    if ($_.Exception.InnerException -and $_.Exception.InnerException.Message) {
+        $message = $_.Exception.InnerException.Message
+    }
+    $hint = ''
+    if ($message -match 'Win32 1801') {
+        $hint = '；队列 ' + $env:TSPL_PRINTER_NAME + ' 不在本机 spooler 里'
+        try {
+            $names = [RawLabelPrinter]::LocalQueueNames()
+            if ($names.Count -gt 0) { $hint = $hint + '；本机队列：' + ($names -join ' / ') }
+        } catch { }
+        $hint = $hint + '（Windows 队列名区分空格，例如 "HPRT N31D"）'
+    }
+    [Console]::Error.WriteLine('RAW 打印失败：' + $message + $hint)
+    exit 1
 } finally {
     $inputBytes.Dispose()
 }

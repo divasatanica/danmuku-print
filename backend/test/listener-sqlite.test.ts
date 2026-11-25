@@ -41,7 +41,7 @@ async function startListener(t: TestContext, keywords: string, printer: Printer 
   const listener = new Listener(new URL(`ws://127.0.0.1:${address.port}/ws`), viewers, printer, jobs);
   activeListener = listener;
   const connected = once(source, 'connection');
-  listener.start('123', keywords);
+  listener.start(keywords);
   const [socket] = await connected;
   return {
     listener,
@@ -156,7 +156,7 @@ test('prints ordinary matching chat with the original text and a stable viewer n
   assert.deepEqual(stored, expected.map(job => ({ ...job, uid, state: 'succeeded' })));
 });
 
-test('does not persist matching gifts, messages from other rooms, or chat without a valid user', async (t) => {
+test('prints chat from any room and skips gifts or chat without a valid user', async (t) => {
   const { listener, database, send } = await startListener(t, '报名');
   await send(
     { ...chat('gift', '1', '报名'), type: 'gift' },
@@ -165,6 +165,6 @@ test('does not persist matching gifts, messages from other rooms, or chat withou
   );
   await listener.drained();
 
-  assert.deepEqual(jobStates(database), []);
-  assert.equal(database.prepare('SELECT COUNT(*) AS total FROM viewers').get()?.total, 0);
+  assert.deepEqual(jobStates(database), [['other-room', 'succeeded']]);
+  assert.equal(database.prepare('SELECT COUNT(*) AS total FROM viewers').get()?.total, 1);
 });

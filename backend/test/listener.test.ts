@@ -45,27 +45,26 @@ test('filters chat, applies quota at admission, and drains in order after stop',
     viewers.close();
   });
   const connected = once(source, 'connection');
-  listener.start('123', ' Hello,，\n世界 ');
-  assert.throws(() => listener.start('321', 'hello'));
+  listener.start(' Hello,，\n世界 ');
+  assert.throws(() => listener.start('hello'));
   listener.setLimit(2);
   const [socket, request] = await connected;
-  assert.equal(request.url, '/ws?roomId=123&types=chat');
-  socket.send(JSON.stringify({ type: '__connected', roomId: '123' }));
+  assert.equal(request.url, '/ws?types=chat');
+  socket.send(JSON.stringify({ type: '__hello', types: ['chat'] }));
   await until(() => listener.status().connection === 'connected');
   const chat = (id: string, uid: string, content: string, roomId = '123', type = 'chat') => ({
     id, roomId, type, ts: 42, user: { id: uid, nickname: '观众' }, data: { content },
   });
   const send = (event: object) => socket.send(JSON.stringify(event));
-  send(chat('wrong', 'wrong', 'HELLO', '321'));
   send(chat('gift', 'gift', 'hello', '123', 'gift'));
   send(chat('miss', 'first', 'bye'));
-  send(chat('1', '90071992547409931', 'say H E L L O'));
+  send(chat('1', '90071992547409931', 'say H E L L O', '321'));
   send(chat('2', '90071992547409931', '世界'));
   send(chat('over', 'numbered', 'hello'));
   await until(() => listener.status().queued === 1 && viewers.lookup('numbered') === 3);
   assert.equal(listener.status().remaining, 0);
   assert.deepEqual(printed, [{
-    viewerNumber: 2, nickname: '观众', content: 'say H E L L O', roomId: '123', eventId: '1', timestamp: 42,
+    viewerNumber: 2, nickname: '观众', content: 'say H E L L O', roomId: '321', eventId: '1', timestamp: 42,
   }]);
 
   listener.setLimit(1);
@@ -82,17 +81,16 @@ test('filters chat, applies quota at admission, and drains in order after stop',
 
   listener.stop();
   assert.equal(listener.status().phase, 'draining');
-  assert.throws(() => listener.start('321', 'hello'));
+  assert.throws(() => listener.start('hello'));
   gate.resolve();
   await until(() => listener.status().phase === 'idle');
   assert.deepEqual(printed.map(({ eventId, viewerNumber }) => [eventId, viewerNumber]),
     [['1', 2], ['2', 2], ['3', 3], ['4', 1]]);
   assert.equal(listener.status().succeeded, 3);
   assert.equal(listener.status().failed, 1);
-  assert.equal(viewers.lookup('wrong'), undefined);
   assert.equal(viewers.lookup('gift'), undefined);
   const nextRoom = once(source, 'connection');
-  listener.start('321', 'hello');
+  listener.start('hello');
   assert.equal(listener.status().succeeded, 0);
   const [otherRoom] = await nextRoom;
   listener.setLimit(1);
@@ -123,7 +121,7 @@ test('defaults to whole decimal numbers after removing whitespace', async (t) =>
   });
 
   const connected = once(source, 'connection');
-  listener.start('123');
+  listener.start();
   const [socket] = await connected;
   const accepted = ['0', ' 1 2 3 ', '　- 1 2 .\t5 ', '+.5'];
   const rejected = ['', '　 ', '价格 12', '12 元', '1.2.3', '1e3', '0xff', '1,000', 'Infinity', '.'];
@@ -160,7 +158,7 @@ test('changes keywords while listening without reconnecting or resetting quota',
 
   assert.throws(() => listener.setKeywords('报名'), StateError);
   const connected = once(source, 'connection');
-  listener.start('123', '报名');
+  listener.start('报名');
   const [socket] = await connected;
   const send = async (...events: object[]) => {
     for (const event of events) socket.send(JSON.stringify(event));
@@ -192,14 +190,17 @@ test('changes keywords while listening without reconnecting or resetting quota',
 
 test('viewer numbers survive reopening and preserve long string UIDs', (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'danmaku-test-'));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
   const database = join(directory, 'viewers.sqlite');
   const first = new Viewers(database);
   assert.equal(first.numberFor('90071992547409931'), 1);
   assert.equal(first.numberFor('90071992547409932'), 2);
   first.close();
   const reopened = new Viewers(database);
-  t.after(() => reopened.close());
+  // 先关闭数据库再删目录：Windows 上删除被打开的文件会失败。
+  t.after(() => {
+    reopened.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
   assert.equal(reopened.numberFor('90071992547409931'), 1);
   assert.equal(reopened.numberFor('another'), 3);
 });
