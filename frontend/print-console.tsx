@@ -6,8 +6,10 @@ const connectionLabels = {
 
 export function PrintConsole({ status, draft, busy, apiError, pollFailed, edit, mutate }: ReturnType<typeof useConsole>) {
   const listening = status?.phase === 'listening';
-  const locked = busy || status?.phase !== 'idle';
+  const taskLocked = busy || status?.phase !== 'idle';
   const quotaLocked = busy || !listening;
+  const keywordsLocked = busy || status?.phase === 'draining';
+  const keywordsDirty = listening && draft.keywords.trim() !== status.keywords;
   let connection = '正在读取状态';
   if (pollFailed) connection = '无法读取打印服务状态';
   else if (status?.phase === 'draining') connection = '已停止监听 · 正在清空队列';
@@ -42,18 +44,21 @@ export function PrintConsole({ status, draft, busy, apiError, pollFailed, edit, 
           <div className="field">
             <label htmlFor="room">直播间号（必填）</label>
             <input id="room" name="roomId" inputMode="numeric" pattern="[0-9]{1,32}" maxLength={32}
-              required readOnly={locked} value={draft.roomId}
+              required readOnly={taskLocked} value={draft.roomId}
               onChange={event => edit('roomId', event.target.value)} />
           </div>
           <div className="field">
             <label htmlFor="keywords">关键词（选填）</label>
             <textarea id="keywords" name="keywords" rows={3} maxLength={2000}
-              aria-describedby="keyword-help" readOnly={locked} value={draft.keywords}
+              aria-describedby="keyword-help" readOnly={keywordsLocked} value={draft.keywords}
               onChange={event => edit('keywords', event.target.value)} />
-            <p id="keyword-help" className="hint">留空时，只匹配去掉所有空格后的整数或小数。填写时，用逗号或换行分隔；匹配时忽略空格和英文字母大小写。</p>
+            <p id="keyword-help" className="hint">留空时，只匹配去掉所有空格后的整数或小数。填写时，用逗号或换行分隔；匹配时忽略空格和英文字母大小写。监听中可直接修改，点「更新关键词」对之后的弹幕生效；已入队的任务和剩余额度不受影响。</p>
           </div>
           <div className="actions">
-            <button type="submit" disabled={locked}>开始监听</button>
+            <button type="submit" disabled={taskLocked}>开始监听</button>
+            <button type="button" disabled={!keywordsDirty} onClick={() => void mutate('/api/keywords', {
+              keywords: draft.keywords,
+            })}>更新关键词</button>
             <button type="button" className="secondary" disabled={quotaLocked}
               onClick={() => void mutate('/api/stop', {})}>停止监听</button>
           </div>

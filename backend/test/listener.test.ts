@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
 import { WebSocketServer } from 'ws';
-import { Listener } from '../src/listener.ts';
+import { Listener, InputError, StateError } from '../src/listener.ts';
 import { PrintJobs } from '../src/print-jobs.ts';
 import type { PrintJob } from '../src/printer.ts';
 import { Viewers } from '../src/viewers.ts';
@@ -136,6 +136,58 @@ test('defaults to whole decimal numbers after removing whitespace', async (t) =>
   await until(() => viewers.lookup(String(accepted.length + rejected.length)) !== undefined);
   await listener.drained();
   assert.deepEqual(printed, accepted);
+});
+
+test('changes keywords while listening without reconnecting or resetting quota', async (t) => {
+  const source = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+  await once(source, 'listening');
+  const address = source.address();
+  assert(address && typeof address === 'object');
+  const viewers = new Viewers(':memory:');
+  const jobs = new PrintJobs(':memory:');
+  const printed: string[] = [];
+  const listener = new Listener(new URL(`ws://127.0.0.1:${address.port}/ws`), viewers, {
+    async print(job) { printed.push(job.content); },
+  }, jobs);
+  t.after(async () => {
+    listener.stop();
+    for (const socket of source.clients) socket.terminate();
+    source.close();
+    await listener.drained();
+    jobs.close();
+    viewers.close();
+  });
+
+  assert.throws(() => listener.setKeywords('报名'), StateError);
+  const connected = once(source, 'connection');
+  listener.start('123', '报名');
+  const [socket] = await connected;
+  const send = async (...events: object[]) => {
+    for (const event of events) socket.send(JSON.stringify(event));
+    // The listener processes the preceding messages before replying to the ping.
+    const received = once(socket, 'pong');
+    socket.ping();
+    await received;
+  };
+  const chat = (id: string, content: string) => ({
+    id, roomId: '123', type: 'chat', ts: 42, user: { id, nickname: '观众' }, data: { content },
+  });
+
+  listener.setLimit(10);
+  await send(chat('1', '我要报名'), chat('2', 'hello'));
+  assert.throws(() => listener.setKeywords(42), InputError);
+  listener.setKeywords(' Hello，世界 ');
+  assert.equal(listener.status().keywords, 'Hello，世界');
+  await send(chat('3', '我要报名'), chat('4', 'say HELLO'), chat('5', '世界'));
+  await listener.drained();
+
+  assert.deepEqual(printed, ['我要报名', 'say HELLO', '世界']);
+  assert.equal(listener.status().limit, 10);
+  assert.equal(listener.status().remaining, 7);
+  assert.equal(listener.status().connection, 'connected');
+
+  listener.stop();
+  assert.throws(() => listener.setKeywords('再见'), StateError);
 });
 
 test('viewer numbers survive reopening and preserve long string UIDs', (t) => {

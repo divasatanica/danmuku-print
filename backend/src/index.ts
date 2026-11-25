@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { InputError, Listener, StateError, record } from './listener.ts';
 import { PrintJobs } from './print-jobs.ts';
 import type { JobPage } from './print-jobs.ts';
-import { MockPrinter } from './printer.ts';
+import { createPrinterFromEnv } from './printer.ts';
 import { Viewers } from './viewers.ts';
 
 function localPort(name: string, fallback: number): number {
@@ -45,7 +45,8 @@ if (!dev) {
 mkdirSync(dirname(database), { recursive: true });
 const viewers = new Viewers(database);
 const jobs = new PrintJobs(database);
-const listener = new Listener(endpoint, viewers, new MockPrinter(), jobs);
+const { printer, summary: printerSummary } = createPrinterFromEnv();
+const listener = new Listener(endpoint, viewers, printer, jobs);
 
 function json(response: ServerResponse, status: number, value: object): void {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -116,7 +117,7 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     if (path === '/api/jobs') return json(response, 200, jobPage(query));
   }
   const jobAction = /^\/api\/jobs\/([^/]+)\/(retry|cancel)$/.exec(path);
-  if (request.method === 'POST' && (jobAction || ['/api/start', '/api/stop', '/api/limit'].includes(path))) {
+  if (request.method === 'POST' && (jobAction || ['/api/start', '/api/stop', '/api/limit', '/api/keywords'].includes(path))) {
     if (request.headers.origin !== undefined && request.headers.origin !== origin && request.headers.origin !== devOrigin) {
       return json(response, 403, { error: '请从打印控制台提交操作。' });
     }
@@ -141,6 +142,7 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
 
     switch (path) {
       case '/api/start': listener.start(input.roomId, input.keywords); break;
+      case '/api/keywords': listener.setKeywords(input.keywords); break;
       case '/api/stop': listener.stop(); break;
       case '/api/limit': listener.setLimit(input.limit); break;
     }
@@ -161,6 +163,7 @@ server.listen(port, '127.0.0.1', () => {
   const unconfirmed = jobs.count('printing');
   if (unconfirmed) console.warn(`有 ${unconfirmed} 条打印任务的结果待确认。`);
   listener.resumePrints();
+  console.log(printerSummary);
   console.log(dev ? `打印 API ${origin} · 开发控制台 ${devOrigin}` : `打印控制台 ${origin}`);
 });
 

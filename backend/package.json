@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch --watch-kill-signal SIGTERM src/index.ts --dev",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
     "start": "node ../dist/backend/index.js",
     "test": "node --test test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "preview:label": "node scripts/preview-label.ts",
+    "spike:render": "node scripts/spike-render.mjs"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.2.0",
     "ws": "^8.21.3"
   },
   "devDependencies": {

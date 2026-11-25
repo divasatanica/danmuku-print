@@ -6,6 +6,7 @@ type Draft = { roomId: string; keywords: string; limit: string };
 type ConsoleState = { status: Status | null; draft: Draft };
 type Command =
   | ['/api/start', { roomId: string; keywords: string }]
+  | ['/api/keywords', { keywords: string }]
   | ['/api/stop', Record<string, never>]
   | ['/api/limit', { limit: number | null }];
 
@@ -20,8 +21,9 @@ function applyStatus(previous: ConsoleState, status: Status): ConsoleState {
   const old = previous.status;
   const { roomId, keywords, phase } = status;
   const taskChanged = old?.roomId !== roomId || old?.keywords !== keywords;
-  const syncTask = roomId !== null &&
-    (!old || (phase !== 'idle' && (old.phase === 'idle' || taskChanged)));
+  const switchedListening = old !== null && (old.phase === 'listening') !== (phase === 'listening');
+  // Keep in-progress edits while listening, but resync when a task starts, stops, or changes.
+  const syncTask = roomId !== null && (!old || taskChanged || switchedListening);
   return {
     status,
     draft: {

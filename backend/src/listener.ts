@@ -9,6 +9,17 @@ function normalizeMatchText(text: string): string {
   return text.replace(/\s+/g, '').toLowerCase();
 }
 
+function parseKeywords(keywordInput: unknown): { input: string; terms: string[] } {
+  if (keywordInput !== undefined && typeof keywordInput !== 'string') {
+    throw new InputError('关键词必须是文本。');
+  }
+  const input = keywordInput?.trim() ?? '';
+  const terms = input.split(/[,，\r\n]/).map(normalizeMatchText).filter(Boolean);
+  if (input.length > 2000) throw new InputError('关键词总长最多 2000 字符。');
+  if (input && !terms.length) throw new InputError('请输入有效关键词，或留空以匹配纯数字。');
+  return { input, terms };
+}
+
 export class InputError extends Error {}
 export class StateError extends Error {}
 
@@ -66,16 +77,10 @@ export class Listener {
     if (this.phase !== 'idle') throw new StateError('当前任务仍在监听或处理打印队列。');
     const roomId = typeof roomInput === 'string' ? roomInput.trim() : '';
     if (!/^\d{1,32}$/.test(roomId)) throw new InputError('请输入 1 到 32 位数字的直播间号。');
-    if (keywordInput !== undefined && typeof keywordInput !== 'string') {
-      throw new InputError('关键词必须是文本。');
-    }
-    const keywords = keywordInput?.trim() ?? '';
-    const terms = keywords.split(/[,，\r\n]/).map(normalizeMatchText).filter(Boolean);
-    if (keywords.length > 2000) throw new InputError('关键词总长最多 2000 字符。');
-    if (keywords && !terms.length) throw new InputError('请输入有效关键词，或留空以匹配纯数字。');
+    const { input, terms } = parseKeywords(keywordInput);
 
     this.roomId = roomId;
-    this.keywordInput = keywords;
+    this.keywordInput = input;
     this.keywords = terms;
     this.limit = this.remaining = null;
     this.succeeded = this.failed = this.reconnectAttempts = 0;
@@ -83,6 +88,13 @@ export class Listener {
     this.phase = 'listening';
     this.connection = 'connecting';
     this.connect(roomId);
+  }
+
+  setKeywords(keywordInput: unknown): void {
+    if (this.phase !== 'listening') throw new StateError('请先开始监听。');
+    const { input, terms } = parseKeywords(keywordInput);
+    this.keywordInput = input;
+    this.keywords = terms;
   }
 
   setLimit(value: unknown): void {

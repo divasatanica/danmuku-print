@@ -1,3 +1,7 @@
 node_modules/
 dist/
 data/
+.npm-cache/
+preview-labels/
+label-*.png
+spike-label.png
